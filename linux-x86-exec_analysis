@@ -1,0 +1,39 @@
+paul@SLAE001:~$ msfvenom  -p linux/x86/exec -o linux-x86-exec.bin -f raw CMD=ls
+No platform was selected, choosing Msf::Module::Platform::Linux from the payload
+No Arch selected, selecting Arch: x86 from the payload
+No encoder or badchars specified, outputting raw payload
+Payload size: 38 bytes
+Saved as: linux-x86-exec.bin
+paul@SLAE001:~$ ndisasm -p intel linux-x86-exec.bin
+00000000  6A0B              push byte +0xb		<-- push b, decimal 11
+00000002  58                pop ax			<-- pop b into ax
+00000003  99                cwd				<-- effectively nulls-out dx
+00000004  52                push dx			<-- push null
+00000005  66682D6389E7      push dword 0xe789632d	<-- push two bytes junk then two bytes '-c', not sure why the junk..
+
+;the following few instructions get messed up so ill rewrite them
+0000000B  682F73            push word 0x732f		<-- another opcode 0x68 misinterpretation, ignore this
+0000000E  680068            push word 0x6800		<-- another opcode 0x68 misinterpretation, ignore this 
+00000011  2F                das
+;rewritten looks like this
+0000000B  68 2F73 6800      push word 0x0068732f	<-- push '/sh\0'
+00000010  68 2F62 696e      push word 0x696e622f	<-- push '/bin'
+
+00000015  89E3              mov bx,sp			<-- mov stack pointer into bx
+00000017  52                push dx			<-- push another null
+00000018  E80300            call word 0x1e		<-- save return address and jump to 0x20
+
+;Bet this is a string...  Yup, its '\0\0ls\0'
+0000001B  0000              add [bx+si],al		<-- null padding
+0000001D  6C                insb			<-- 'ls\0'
+0000001E  7300              jnc 0x20
+
+00000020  57                push di			<-- push di, which points to '-c'
+00000021  53                push bx			<-- push bx, which points to '/bin/sh'
+00000022  89E1              mov cx,sp			<-- mov stack pointer to cx
+00000024  CD80              int 0x80			<-- invoke system call 11, execve('/bin/sh', ['/bin/sh', '-c', 'ls'])
+
+
+In summary, build up an array of pointers on the stack for the cx argument, so slightly more complicated than just loading up the registers.
+
+Not sure why they are using the dword with junk instead of just pushing the '-c' on as a word or how edi gets populated but will research this further...
