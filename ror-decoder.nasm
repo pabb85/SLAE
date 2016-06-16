@@ -1,7 +1,4 @@
-; Filename: xor-decoder.nasm
-; Author:  Vivek Ramachandran
-; Website:  http://securitytube.net
-; Training: http://securitytube-training.com 
+; Filename: ror-decoder.nasm
 ;
 ;
 ; Purpose: 
